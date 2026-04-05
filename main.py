@@ -1,13 +1,11 @@
 import json
 import random
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import flet as ft
-import pandas as pd
 
 
-JSON_FILE = "assets/hanja_data.json"
+JSON_FILE = "hanja_data.json"
 
 LEVEL_ORDER = ["8급", "7급", "6급", "준5급", "5급", "준4급", "4급", "준3급", "3급"]
 
@@ -29,8 +27,6 @@ LEVEL_RANGE_MAP: Dict[str, List[str]] = {
     "3급": ["K-1", "K-2", "K-3", "K-4", "K-5", "K-6"],
 }
 
-EXPECTED_COLS = ["번호", "한자", "뜻", "독음", "급수", "단계", "타입"]
-
 BG_PINK = "#F1DADF"
 CARD_WHITE = "#F4F4F4"
 BLACK_BTN = "#272222"
@@ -42,7 +38,7 @@ BORDER = "#2A2A2A"
 
 
 def safe_text(v: object) -> str:
-    if pd.isna(v):
+    if v is None:
         return ""
     return str(v).strip()
 
@@ -62,43 +58,43 @@ def compact_step_value(v: str) -> str:
     return str(v).replace("-", "").strip().upper()
 
 
-def read_excel_data(file_path: str) -> pd.DataFrame:
-    path = Path(JSON_FILE)
-    if not path.exists():
-        return pd.DataFrame(columns=EXPECTED_COLS + ["표시단계"])
-
+def load_json_items(page: ft.Page) -> List[Dict[str, str]]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(page.get_asset_path(JSON_FILE), "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
-        return pd.DataFrame(columns=EXPECTED_COLS + ["표시단계"])
+        return []
 
-    df = pd.DataFrame(data)
+    if not isinstance(data, list):
+        return []
 
-    for col in EXPECTED_COLS + ["표시단계"]:
-        if col not in df.columns:
-            df[col] = ""
-
-    for col in EXPECTED_COLS + ["표시단계"]:
-        df[col] = df[col].apply(safe_text)
-
-    df["단계"] = df["단계"].apply(normalize_step_value)
-    df["표시단계"] = df["표시단계"].apply(compact_step_value)
-
-    return df
+    cleaned: List[Dict[str, str]] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        item = {
+            "번호": safe_text(row.get("번호", "")),
+            "한자": safe_text(row.get("한자", "")),
+            "뜻": safe_text(row.get("뜻", "")),
+            "독음": safe_text(row.get("독음", "")),
+            "급수": safe_text(row.get("급수", "")),
+            "단계": normalize_step_value(safe_text(row.get("단계", ""))),
+            "타입": safe_text(row.get("타입", "")),
+            "표시단계": compact_step_value(safe_text(row.get("표시단계", row.get("단계", "")))),
+        }
+        cleaned.append(item)
+    return cleaned
 
 
 def main(page: ft.Page):
     page.title = "한자 공부"
-    page.window_width = 430
-    page.window_height = 932
     page.bgcolor = BG_PINK
     page.padding = 0
-    page.scroll = ft.ScrollMode.HIDDEN
+    page.scroll = ft.ScrollMode.AUTO
     page.theme_mode = ft.ThemeMode.LIGHT
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-    excel_df = read_excel_data(JSON_FILE)
+    all_items = load_json_items(page)
 
     state = {
         "screen": "home",
@@ -130,7 +126,7 @@ def main(page: ft.Page):
     }
 
     def vw(ratio: float, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
-        pw = page.width if page.width and page.width > 0 else 430
+        pw = page.width if page.width and page.width > 0 else 390
         base = int(pw * ratio)
         if min_v is not None:
             base = max(base, min_v)
@@ -138,16 +134,24 @@ def main(page: ft.Page):
             base = min(base, max_v)
         return base
 
+    def is_mobile_narrow() -> bool:
+        pw = page.width if page.width and page.width > 0 else 390
+        return pw <= 430
+
     def card_w() -> int:
-        pw = page.width if page.width and page.width > 0 else 430
-        return min(max(int(pw * 0.92), 360), 392)
+        pw = page.width if page.width and page.width > 0 else 390
+        if is_mobile_narrow():
+            return int(pw * 0.96)
+        return min(int(pw * 0.92), 430)
 
     def card_h() -> int:
-        ph = page.height if page.height and page.height > 0 else 932
-        return min(max(int(ph * 0.88), 780), 840)
+        ph = page.height if page.height and page.height > 0 else 844
+        if is_mobile_narrow():
+            return int(ph * 0.90)
+        return min(int(ph * 0.88), 840)
 
     def title_size() -> int:
-        return vw(0.102, 32, 44)
+        return vw(0.102, 30, 44)
 
     def top_label(title_top: str) -> ft.Control:
         return ft.Container(
@@ -192,29 +196,36 @@ def main(page: ft.Page):
         )
 
     def arrow_button(icon_name: str, on_click=None, disabled: bool = False):
+        btn = 76 if is_mobile_narrow() else 88
+        icon = 54 if is_mobile_narrow() else 66
         return ft.Container(
-            width=88,
-            height=88,
-            border_radius=44,
+            width=btn,
+            height=btn,
+            border_radius=btn // 2,
             alignment=ft.Alignment(0, 0),
             ink=not disabled,
             on_click=None if disabled else on_click,
-            content=ft.Icon(icon_name, size=66, color="#D7D7D7" if disabled else BLUE),
+            content=ft.Icon(icon_name, size=icon, color="#D7D7D7" if disabled else BLUE),
         )
 
     def center_circle_button(text: str, on_click=None):
-        font_size = 34 if text == "?" else 24 if text == "정답" else 34
+        outer = 76 if is_mobile_narrow() else 88
+        inner = 62 if is_mobile_narrow() else 72
+        font_size = 28 if text == "?" else 20 if text == "정답" else 28
+        if not is_mobile_narrow():
+            font_size = 34 if text == "?" else 24 if text == "정답" else 34
+
         return ft.Container(
-            width=88,
-            height=88,
-            border_radius=44,
+            width=outer,
+            height=outer,
+            border_radius=outer // 2,
             alignment=ft.Alignment(0, 0),
             ink=True,
             on_click=on_click,
             content=ft.Container(
-                width=72,
-                height=72,
-                border_radius=36,
+                width=inner,
+                height=inner,
+                border_radius=inner // 2,
                 border=ft.border.all(4, BLUE),
                 alignment=ft.Alignment(0, 0),
                 content=ft.Text(text, size=font_size, weight=ft.FontWeight.BOLD, color=BLUE),
@@ -229,6 +240,7 @@ def main(page: ft.Page):
                     width=card_w(),
                     height=card_h(),
                     bgcolor=CARD_WHITE,
+                    border_radius=18,
                     content=ft.Stack(
                         controls=[
                             ft.Container(
@@ -274,11 +286,7 @@ def main(page: ft.Page):
             height=120,
             content=ft.Stack(
                 controls=[
-                    ft.Container(
-                        left=badge_left,
-                        top=badge_top,
-                        content=level_badge(level),
-                    ),
+                    ft.Container(left=badge_left, top=badge_top, content=level_badge(level)),
                     ft.Container(
                         left=0,
                         right=0,
@@ -406,24 +414,24 @@ def main(page: ft.Page):
             groups.setdefault(head, []).append(norm)
         return groups
 
-    def filter_df(df: pd.DataFrame, target_type: str) -> pd.DataFrame:
+    def filter_items(target_type: str) -> List[Dict[str, str]]:
         compact_ranges = [compact_step_value(x) for x in state["selected_ranges"]]
-        if df.empty:
-            return df
-        return df[
-            (df["급수"] == state["selected_level"])
-            & (df["표시단계"].isin(compact_ranges))
-            & (df["타입"].astype(str).str.contains(target_type, na=False))
-        ].copy()
+        out: List[Dict[str, str]] = []
+        for item in all_items:
+            if item.get("급수") != state["selected_level"]:
+                continue
+            if item.get("표시단계") not in compact_ranges:
+                continue
+            if target_type not in item.get("타입", ""):
+                continue
+            out.append(item.copy())
+        return out
 
     def build_items() -> List[Dict[str, str]]:
         if not state["selected_level"] or not state["selected_ranges"] or not state["selected_category"]:
             return []
         target_type = "선정" if state["selected_category"] == "선정 한자" else "교과서"
-        filtered = filter_df(excel_df, target_type)
-        if filtered.empty:
-            return []
-        items = filtered.to_dict("records")
+        items = filter_items(target_type)
         if state["random_order"]:
             random.shuffle(items)
         else:
@@ -443,29 +451,29 @@ def main(page: ft.Page):
 
     def append_unique_item(target_list: List[Dict[str, str]], item: Dict[str, str]):
         key = get_item_key(item)
-        exists = any(get_item_key(x) == key for x in target_list)
-        if not exists:
+        if not any(get_item_key(x) == key for x in target_list):
             target_list.append(item.copy())
 
     def build_quiz_choices(item: Dict[str, str]) -> List[str]:
         target_type = "선정" if state["selected_category"] == "선정 한자" else "교과서"
-        pool = excel_df[excel_df["타입"].astype(str).str.contains(target_type, na=False)].copy()
+        pool = [x for x in all_items if target_type in x.get("타입", "")]
 
         if state["quiz_direction"] == "한자→뜻":
             if target_type == "선정":
                 correct = f"{item['뜻']} {item['독음']}".strip()
-                pool["후보"] = pool.apply(
-                    lambda row: f"{str(row['뜻']).strip()} {str(row['독음']).strip()}".strip(),
-                    axis=1,
-                )
-                candidates = [str(x).strip() for x in pool["후보"].tolist() if str(x).strip() and str(x).strip() != correct]
+                candidates = [
+                    f"{x.get('뜻', '')} {x.get('독음', '')}".strip()
+                    for x in pool
+                    if f"{x.get('뜻', '')} {x.get('독음', '')}".strip() != correct
+                ]
             else:
                 correct = item["독음"]
-                candidates = [str(x).strip() for x in pool["독음"].tolist() if str(x).strip() and str(x).strip() != correct]
+                candidates = [x.get("독음", "") for x in pool if x.get("독음", "") != correct]
         else:
             correct = item["한자"]
-            candidates = [str(x).strip() for x in pool["한자"].tolist() if str(x).strip() and str(x).strip() != correct]
+            candidates = [x.get("한자", "") for x in pool if x.get("한자", "") != correct]
 
+        candidates = [x for x in candidates if x]
         random.shuffle(candidates)
         choices = [correct] + candidates[:3]
         while len(choices) < 4:
@@ -533,7 +541,7 @@ def main(page: ft.Page):
         state["last_main_screen"] = "study_type"
 
         if not state["items"]:
-            state["error_message"] = "데이터에 조건과 일치하는 항목이 없습니다."
+            state["error_message"] = "데이터를 찾지 못했습니다. JSON 파일을 확인해 주세요."
             render()
             return
 
@@ -690,7 +698,6 @@ def main(page: ft.Page):
     def fixed_problem_box(text: str, mode: str, height: int = 210, y: float = -0.08):
         use_text_size = mode.endswith("_textsize")
         base_mode = mode.replace("_textsize", "")
-        font_family = "궁서체" if base_mode == "hanja" else "Nanum Myeongjo"
         text_size_mode = "text" if use_text_size else base_mode
 
         return ft.Container(
@@ -699,9 +706,8 @@ def main(page: ft.Page):
             content=ft.Text(
                 text,
                 size=big_display_text_size(text, text_size_mode),
-                weight=ft.FontWeight.NORMAL if base_mode == "hanja" else ft.FontWeight.BOLD,
+                weight=ft.FontWeight.BOLD,
                 text_align=ft.TextAlign.CENTER,
-                font_family=font_family,
             ),
         )
 
@@ -724,7 +730,7 @@ def main(page: ft.Page):
                         [
                             ft.Row(
                                 [
-                                    ft.Text(item.get("한자", ""), size=30, weight=ft.FontWeight.BOLD, font_family="궁서체"),
+                                    ft.Text(item.get("한자", ""), size=30, weight=ft.FontWeight.BOLD),
                                     ft.Container(width=8),
                                     ft.Text(desc, size=16, weight=ft.FontWeight.BOLD),
                                 ],
@@ -751,16 +757,12 @@ def main(page: ft.Page):
             width=card_w(),
             height=card_h(),
             bgcolor=CARD_WHITE,
+            border_radius=18,
             padding=ft.padding.all(24),
             content=ft.Column(
                 [
                     ft.Container(expand=1),
-                    ft.Text(
-                        "한자 공부",
-                        size=title_size(),
-                        weight=ft.FontWeight.BOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
+                    ft.Text("한자 공부", size=title_size(), weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
                     ft.Container(height=18),
                     black_button("입장 하기", lambda e: go("level"), width=144),
                     ft.Container(height=12),
@@ -794,30 +796,17 @@ def main(page: ft.Page):
                 ft.Container(height=40),
                 ft.Text("급수 선택하기", size=title_size(), weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER),
                 ft.Container(height=50),
-                ft.Container(
-                    content=ft.Column(
-                        rows,
-                        alignment=ft.MainAxisAlignment.START,
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=18,
-                    ),
-                ),
+                ft.Column(rows, spacing=18, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Container(height=38),
-                ft.Row(
-                    [black_button("다음", lambda e: go("range"), disabled=state["selected_level"] is None, width=132)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
+                ft.Row([black_button("다음", lambda e: go("range"), disabled=state["selected_level"] is None, width=132)], alignment=ft.MainAxisAlignment.CENTER),
                 ft.Container(height=12),
-                ft.Row(
-                    [black_button("오답 노트", lambda e: open_wrong_note("level"), width=132, disabled=len(state["wrong_note_items"]) == 0)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
+                ft.Row([black_button("오답 노트", lambda e: open_wrong_note("level"), width=132, disabled=len(state["wrong_note_items"]) == 0)], alignment=ft.MainAxisAlignment.CENTER),
                 ft.Container(height=80),
             ],
             expand=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        return page_shell("급수 선택", content, lambda e: go("home"), 60, 100)
+        return page_shell("급수 선택", content, lambda e: go("home"), 16, 50)
 
     def render_range():
         level = state["selected_level"] or "?"
@@ -880,59 +869,47 @@ def main(page: ft.Page):
                         row_controls.append(range_button(step, selected, make_step_handler(step)))
                     rows.append(ft.Row(row_controls, alignment=ft.MainAxisAlignment.CENTER, spacing=18))
 
-                    panels.append(
-                        ft.Container(
-                            width=card_w() - 48,
-                            border=ft.border.all(1.2, BORDER),
-                            border_radius=12,
-                            padding=ft.padding.only(left=12, right=12, top=10, bottom=12),
-                            content=ft.Column(
-                                [
-                                    ft.Row(
-                                        [
-                                            ft.Icon(ft.Icons.EDIT_OUTLINED, size=20, color="black"),
-                                            ft.Text(f"파트 {part}", size=18, weight=ft.FontWeight.BOLD),
-                                        ],
-                                        alignment=ft.MainAxisAlignment.CENTER,
-                                        spacing=8,
-                                    ),
-                                    ft.Container(height=8),
-                                    *rows,
-                                ],
-                                spacing=10,
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                        )
+                panels.append(
+                    ft.Container(
+                        width=card_w() - 48,
+                        border=ft.border.all(1.2, BORDER),
+                        border_radius=12,
+                        padding=ft.padding.only(left=12, right=12, top=10, bottom=12),
+                        content=ft.Column(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.EDIT_OUTLINED, size=20, color="black"),
+                                        ft.Text(f"파트 {part}", size=18, weight=ft.FontWeight.BOLD),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.CENTER,
+                                    spacing=8,
+                                ),
+                                ft.Container(height=8),
+                                *rows,
+                            ],
+                            spacing=10,
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
                     )
+                )
 
         content = ft.Column(
             [
                 split_page_title(level, "범위 지정", badge_left=20, badge_top=15, title_top=14),
                 ft.Container(height=-6),
-                ft.Container(
-                    content=ft.Column(
-                        panels,
-                        spacing=12,
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        alignment=ft.MainAxisAlignment.START
-                    ),
-                ),
+                ft.Column(panels, spacing=12, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Container(height=12),
-                ft.Row(
-                    [black_button("시작", lambda e: go("study_type"), disabled=len(state["selected_ranges"]) == 0, width=132)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
+                ft.Row([black_button("시작", lambda e: go("study_type"), disabled=len(state["selected_ranges"]) == 0, width=132)], alignment=ft.MainAxisAlignment.CENTER),
                 ft.Container(height=72),
             ],
             expand=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        return page_shell("범위 선택", content, lambda e: go("level"), 30, 70)
+        return page_shell("범위 선택", content, lambda e: go("level"), 16, 50)
 
     def render_study_type():
         level = state["selected_level"] or "?"
-        card_sel = state["selected_mode"] == "카드 외우기"
-        quiz_sel = state["selected_mode"] == "퀴즈"
 
         def set_selection(category: str, mode: str):
             def handler(_):
@@ -951,33 +928,26 @@ def main(page: ft.Page):
                         [
                             type_block(
                                 "선정 한자",
-                                state["selected_category"] == "선정 한자" and card_sel,
-                                state["selected_category"] == "선정 한자" and quiz_sel,
+                                state["selected_category"] == "선정 한자" and state["selected_mode"] == "카드 외우기",
+                                state["selected_category"] == "선정 한자" and state["selected_mode"] == "퀴즈",
                                 set_selection("선정 한자", "카드 외우기"),
                                 set_selection("선정 한자", "퀴즈"),
                             ),
                             type_block(
                                 "교과서 한자",
-                                state["selected_category"] == "교과서 한자" and card_sel,
-                                state["selected_category"] == "교과서 한자" and quiz_sel,
+                                state["selected_category"] == "교과서 한자" and state["selected_mode"] == "카드 외우기",
+                                state["selected_category"] == "교과서 한자" and state["selected_mode"] == "퀴즈",
                                 set_selection("교과서 한자", "카드 외우기"),
                                 set_selection("교과서 한자", "퀴즈"),
                             ),
                         ],
                         spacing=26,
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        alignment=ft.MainAxisAlignment.START,
                     ),
                 ),
-                ft.Row(
-                    [black_button("시작", start_study, disabled=not (state["selected_category"] and state["selected_mode"]), width=132)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
+                ft.Row([black_button("시작", start_study, disabled=not (state["selected_category"] and state["selected_mode"]), width=132)], alignment=ft.MainAxisAlignment.CENTER),
                 ft.Container(height=10),
-                ft.Row(
-                    [black_button("오답 노트", lambda e: open_wrong_note("study_type"), width=132, disabled=len(state["wrong_note_items"]) == 0)],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
+                ft.Row([black_button("오답 노트", lambda e: open_wrong_note("study_type"), width=132, disabled=len(state["wrong_note_items"]) == 0)], alignment=ft.MainAxisAlignment.CENTER),
                 ft.Container(height=64),
             ],
             expand=True,
@@ -998,10 +968,7 @@ def main(page: ft.Page):
                     ft.Container(height=18),
                     ft.Text("퀴즈에서 틀린 문제가 여기에 쌓입니다.", size=15, color=TEXT_GRAY, text_align=ft.TextAlign.CENTER),
                     ft.Container(expand=True),
-                    ft.Row(
-                        [black_button("홈으로", go_home, width=140)],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    ),
+                    ft.Row([black_button("홈으로", go_home, width=140)], alignment=ft.MainAxisAlignment.CENTER),
                     ft.Container(height=80),
                 ],
                 expand=True,
@@ -1013,7 +980,7 @@ def main(page: ft.Page):
             expand=True,
             spacing=10,
             padding=0,
-            controls=[wrong_note_row(item, i + 1) for i, item in enumerate(items)]
+            controls=[wrong_note_row(item, i + 1) for i, item in enumerate(items)],
         )
 
         body = ft.Column(
@@ -1023,11 +990,7 @@ def main(page: ft.Page):
                 ft.Container(height=8),
                 ft.Text(f"저장된 오답 {len(items)}개", size=17, weight=ft.FontWeight.BOLD, color=TEXT_GRAY),
                 ft.Container(height=10),
-                ft.Container(
-                    expand=True,
-                    width=card_w() - 34,
-                    content=list_view,
-                ),
+                ft.Container(expand=True, width=card_w() - 34, content=list_view),
                 ft.Container(height=10),
                 ft.Row(
                     [
@@ -1074,10 +1037,7 @@ def main(page: ft.Page):
         idx = state["current_index"] + 1
         total = len(state["items"])
 
-        if item.get("타입", "").startswith("교과서"):
-            back_text = item["독음"]
-        else:
-            back_text = f"{item['뜻']} {item['독음']}".strip()
+        back_text = item["독음"] if item.get("타입", "").startswith("교과서") else f"{item['뜻']} {item['독음']}".strip()
 
         if state["is_finished"]:
             body = ft.Column(
@@ -1088,8 +1048,7 @@ def main(page: ft.Page):
                             ft.Container(expand=True),
                             ft.Text("랜덤", size=16, weight=ft.FontWeight.BOLD),
                             ft.Switch(value=state["random_order"], on_change=toggle_random),
-                        ],
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ]
                     ),
                     ft.Container(height=8),
                     ft.Row(
@@ -1100,7 +1059,6 @@ def main(page: ft.Page):
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=0,
                     ),
-                    ft.Container(height=7),
                     ft.Container(expand=True),
                     fixed_problem_box(item["한자"], "hanja", 150, -0.12),
                     ft.Container(height=4),
@@ -1113,10 +1071,7 @@ def main(page: ft.Page):
                             ft.Container(
                                 content=ft.Text("네", size=30, color=SOFT_BLUE, weight=ft.FontWeight.BOLD),
                                 ink=True,
-                                on_click=lambda e: (
-                                    state.update({"current_index": 0, "is_finished": False, "show_card_back": False}),
-                                    render(),
-                                ),
+                                on_click=lambda e: (state.update({"current_index": 0, "is_finished": False, "show_card_back": False}), render()),
                             ),
                             ft.Container(width=28),
                             ft.Container(
@@ -1142,8 +1097,7 @@ def main(page: ft.Page):
                         ft.Container(expand=True),
                         ft.Text("랜덤", size=16, weight=ft.FontWeight.BOLD),
                         ft.Switch(value=state["random_order"], on_change=toggle_random),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ]
                 ),
                 ft.Container(height=8),
                 ft.Row(
@@ -1156,7 +1110,6 @@ def main(page: ft.Page):
                 ),
                 ft.Container(height=8),
                 fixed_problem_box(item["한자"], "hanja", 200, -0.16),
-                ft.Container(height=0),
                 ft.Container(
                     height=100,
                     alignment=ft.Alignment(0, -1),
@@ -1166,7 +1119,6 @@ def main(page: ft.Page):
                         color="#1A73E8",
                         weight=ft.FontWeight.BOLD,
                         text_align=ft.TextAlign.CENTER,
-                        font_family="Nanum Myeongjo",
                     ),
                 ),
                 ft.Container(height=30),
@@ -1210,15 +1162,9 @@ def main(page: ft.Page):
         if state["quiz_direction"] == "한자→뜻":
             question_text = item["한자"]
             question_mode = "hanja"
-            if state["selected_category"] == "선정 한자" or item.get("타입", "").startswith("선정"):
-                answer_text = f"{item['뜻']} {item['독음']}".strip()
-            else:
-                answer_text = item["독음"]
+            answer_text = f"{item['뜻']} {item['독음']}".strip() if ("선정" in item.get("타입", "")) else item["독음"]
         else:
-            if state["selected_category"] == "선정 한자" or item.get("타입", "").startswith("선정"):
-                question_text = f"{item['뜻']} {item['독음']}".strip()
-            else:
-                question_text = item["독음"]
+            question_text = f"{item['뜻']} {item['독음']}".strip() if ("선정" in item.get("타입", "")) else item["독음"]
             question_mode = "text"
             answer_text = item["한자"]
 
@@ -1250,7 +1196,7 @@ def main(page: ft.Page):
             render()
 
         option_controls = []
-        option_width = card_w() - 152
+        option_width = card_w() - 36
 
         for i, choice in enumerate(choices):
             selected = state["quiz_selected_index"] == i
@@ -1265,14 +1211,11 @@ def main(page: ft.Page):
                 if choice == answer_text:
                     bg = "#DCEAD8"
                     border_color = "#43A047"
-                else:
-                    bg = "#EFEFEF"
-                    border_color = "#999999"
 
             option_controls.append(
                 ft.Container(
                     width=option_width,
-                    height=46,
+                    height=54 if is_mobile_narrow() else 46,
                     border_radius=5,
                     bgcolor=bg,
                     border=ft.border.all(1, border_color),
@@ -1297,9 +1240,11 @@ def main(page: ft.Page):
                                 alignment=ft.Alignment(0, 0),
                                 content=ft.Text(
                                     choice,
-                                    size=26,
+                                    size=22 if is_mobile_narrow() else 26,
                                     weight=ft.FontWeight.BOLD,
                                     text_align=ft.TextAlign.CENTER,
+                                    max_lines=2,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
                                 ),
                             ),
                         ]
@@ -1362,8 +1307,7 @@ def main(page: ft.Page):
                         ft.Container(expand=True),
                         ft.Text("랜덤", size=16, weight=ft.FontWeight.BOLD),
                         ft.Switch(value=state["random_order"], on_change=toggle_random),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ]
                 ),
                 ft.Container(height=-2),
                 ft.Row(
@@ -1385,13 +1329,7 @@ def main(page: ft.Page):
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=4,
                 ),
-                ft.Container(height=2),
-                fixed_problem_box(
-                    question_text,
-                    "hanja_textsize" if question_mode == "hanja" else "text",
-                    110,
-                    -0.90,
-                ),
+                fixed_problem_box(question_text, "hanja_textsize" if question_mode == "hanja" else "text", 110, -0.90),
                 ft.Container(
                     height=54,
                     alignment=ft.Alignment(0, -0.65),
@@ -1403,12 +1341,7 @@ def main(page: ft.Page):
                         text_align=ft.TextAlign.CENTER,
                     ),
                 ),
-                ft.Container(height=-20),
-                ft.Column(
-                    [ft.Row([opt], alignment=ft.MainAxisAlignment.CENTER) for opt in option_controls],
-                    spacing=6,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                ft.Column([ft.Row([opt], alignment=ft.MainAxisAlignment.CENTER) for opt in option_controls], spacing=6),
                 ft.Container(height=20),
                 ft.Row(
                     [
@@ -1421,7 +1354,7 @@ def main(page: ft.Page):
                 ),
                 ft.Container(height=20),
                 ft.Container(
-                    width=card_w() - 160,
+                    width=card_w() - 120,
                     bgcolor="#EDEDED",
                     border_radius=18,
                     padding=ft.padding.symmetric(horizontal=14, vertical=7),
@@ -1479,12 +1412,7 @@ def main(page: ft.Page):
         else:
             root = render_home()
 
-        page.add(
-            ft.Container(
-                padding=ft.padding.symmetric(horizontal=6, vertical=8),
-                content=root,
-            )
-        )
+        page.add(ft.Container(padding=ft.padding.symmetric(horizontal=6, vertical=8), content=root))
         page.update()
 
     def on_resize(_):
@@ -1495,7 +1423,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    try:
-        ft.run(main)
-    except AttributeError:
-        ft.app(target=main)
+    ft.app(target=main, assets_dir="assets")

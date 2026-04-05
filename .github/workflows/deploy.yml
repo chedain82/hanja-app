@@ -33,11 +33,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install "flet[all]" pandas
 
-      - name: Verify Flet CLI
-        run: |
-          which flet
-          flet --version
-
       - name: Build Flet web app
         run: yes | flet build web
 

@@ -39,8 +39,7 @@ jobs:
           flet --version
 
       - name: Build Flet web app
-        run: flet build web --base-url /${{ github.event.repository.name }}/
-
+        run: yes | flet build web --base-url /${{ github.event.repository.name }}/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

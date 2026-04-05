@@ -31,10 +31,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install flet flet-cli pandas
+          pip install "flet[all]" pandas
+
+      - name: Verify Flet CLI
+        run: |
+          which flet
+          flet --version
 
       - name: Build Flet web app
-        run: python -m flet_cli build web --base-url /${{ github.event.repository.name }}/
+        run: flet build web --base-url /${{ github.event.repository.name }}/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

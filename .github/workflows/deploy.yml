@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install flet pandas
+      - - run: pip install -r requirements.txt
 
       - run: flet build web --base-url /${{ github.event.repository.name }}/
 

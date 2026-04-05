@@ -35,7 +35,7 @@ jobs:
 
       - name: Build Flet web app
         run: |
-          flet build web --module-name main --base-url /hanja-app/ --project hanja-app --yes
+          flet build web --module-name main --base-url /hanja-app --project hanja-app --yes
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

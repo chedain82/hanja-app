@@ -34,7 +34,8 @@ jobs:
           pip install "flet[all]" pandas
 
       - name: Build Flet web app
-        run: yes | flet build web
+        run: |
+          flet build web main.py --base-url /hanja-app/ --project hanja-app --yes
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -46,6 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+
+    permissions:
+      pages: write
+      id-token: write
 
     steps:
       - name: Deploy to GitHub Pages

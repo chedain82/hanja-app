@@ -39,7 +39,8 @@ jobs:
           flet --version
 
       - name: Build Flet web app
-        run: yes | flet build web --base-url /${{ github.event.repository.name }}/
+        run: yes | flet build web
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -50,6 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+
     steps:
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4

@@ -59,11 +59,37 @@ def compact_step_value(v: str) -> str:
 
 
 def load_json_items(page: ft.Page) -> List[Dict[str, str]]:
+    data = None
+    candidate_paths: List[str] = []
+
     try:
-        with open(page.get_asset_path(JSON_FILE), "r", encoding="utf-8") as f:
-            data = json.load(f)
+        candidate_paths.append(page.get_asset_path(JSON_FILE))
     except Exception:
-        return []
+        pass
+
+    candidate_paths.extend(
+        [
+            JSON_FILE,
+            f"assets/{JSON_FILE}",
+            f"/{JSON_FILE}",
+            f"/assets/{JSON_FILE}",
+        ]
+    )
+
+    seen = set()
+    unique_paths: List[str] = []
+    for path in candidate_paths:
+        if path and path not in seen:
+            unique_paths.append(path)
+            seen.add(path)
+
+    for path in unique_paths:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            break
+        except Exception:
+            continue
 
     if not isinstance(data, list):
         return []
@@ -1182,6 +1208,11 @@ def main(page: ft.Page):
             if state["quiz_selected_index"] is None or state["quiz_checked"]:
                 return
 
+            if not choices:
+                state["error_message"] = "보기 생성에 실패했습니다."
+                render()
+                return
+
             state["quiz_checked"] = True
 
             if choices[state["quiz_selected_index"]] == answer_text:
@@ -1423,4 +1454,7 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.app(
+        target=main,
+        assets_dir="assets"
+    )
